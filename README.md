@@ -32,7 +32,7 @@ Full researched feature roadmap (what other camera hacks such as CHDK and Magic 
 | Simulated long exposure (light trails, silky water, remove passers-by) | ✅ |
 | Timelapse → MP4 | ✅ min interval ≈ 5 s |
 | Card browser, thumbnails, import (per folder, never deletes) | ✅ |
-| Camera clock fix (it resets to 2011-01-01 on battery swaps) | ✅ new photos carry the right date |
+| Automatic clock fix: every time the camera connects, its clock is set from the Mac if it is off by more than a minute (it resets to 2011-01-01 on every battery swap). Log: `/tmp/l120-clock.log`; opt out with `L120_NO_CLOCK_SYNC=1` | ✅ tested with a simulated reset |
 | Plug-and-go auto-import (+ optional Apple Photos → iPhone) | ✅ 315 files / 1.7 GB in 4 min 21 s, size-checked, files keep the camera's dates |
 
 **Lab: new photo powers on the Mac** (tested on real L120 frames; see `docs/lab/`)

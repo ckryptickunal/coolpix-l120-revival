@@ -130,7 +130,30 @@ class L120:
         if rc not in (OK, 0x201E):  # 0x201E = session already open
             raise CameraError(f"OpenSession failed: {hex(rc)}")
         self.drain_events()
+        if os.environ.get("L120_NO_CLOCK_SYNC") != "1":
+            self.auto_sync_clock()
         return self
+
+    def auto_sync_clock(self, tolerance_s: float = 60) -> str | None:
+        """Set the camera clock from the Mac whenever it's off by more than `tolerance_s`.
+        The L120 loses its clock on every battery swap (back to 2011-01-01), which is why
+        so many old photos carry wrong dates. Returns a note when it changed the clock."""
+        try:
+            cam_t = dt.datetime.strptime(self.clock()[:15], "%Y%m%dT%H%M%S")
+        except (ValueError, CameraError):
+            cam_t = None
+        now = dt.datetime.now()
+        if cam_t is not None and abs((now - cam_t).total_seconds()) <= tolerance_s:
+            return None
+        before = cam_t.isoformat() if cam_t else "unreadable"
+        after = self.set_clock(now)
+        note = f"camera clock was {before}, set to {after}"
+        try:
+            with open("/tmp/l120-clock.log", "a") as f:
+                f.write(f"{now.isoformat(timespec='seconds')} {note}\n")
+        except OSError:
+            pass
+        return note
 
     def close(self):
         if self.dev is None:
