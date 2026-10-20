@@ -2,6 +2,26 @@
 
 Bringing a 2011 Nikon COOLPIX L120 back to life: Mac-side control, an MCP server, and a path toward custom firmware.
 
+## The camera (official specs)
+
+| | |
+|---|---|
+| Processor | Nikon EXPEED C2 (silicon vendor unknown; likely ARM) |
+| Sensor | 1/2.3" CCD, 14.1 MP effective |
+| Lens | 21x NIKKOR, 25–525 mm equiv., f/3.1–5.8, sensor-shift + electronic VR, macro from 1 cm |
+| Screen | 3" 921k-dot LCD |
+| ISO | 80–6400 |
+| Shutter | 1/1000–1 s normally; **4 s max, Fireworks scene only**; no manual mode |
+| Video | 720p HD with stereo sound |
+| Ports | Hi-Speed USB 2.0 (PTP) + composite AV out (shared port, cable UC-E6 / EG-CP16), **mini-HDMI out with CEC** |
+| Storage | SD/SDHC/SDXC + ~120 MB internal |
+| Power | 4× AA (alkaline ~330 shots, lithium ~890, NiMH ~520), AC adapter EH-67 |
+| Weight / size | ~431 g, 110 × 77 × 78 mm; announced 9 Feb 2011 |
+
+Source: [Nikon press release](https://www.nikon.com/company/news/2011/0209_l120l23_03/). Controls: shutter with zoom ring, side zoom rocker on the barrel, power, movie-record, SCENE, playback, multi-selector (flash / self-timer / macro / exposure comp / OK), MENU, delete, pop-up flash.
+
+Full researched feature roadmap (what other camera hacks such as CHDK and Magic Lantern do, sorted into "doable now", "needs firmware" and "impossible"): [docs/FEATURE_CATALOG.md](docs/FEATURE_CATALOG.md).
+
 ## What works today (tested on the real camera, firmware V1.1)
 
 | Feature | How | Status |
@@ -19,8 +39,11 @@ The camera advertises only the standard PTP/MTP command set (probe: `probe/devic
 no Nikon vendor commands, no live view, no zoom, no exposure/ISO/shutter control, no video start/stop.
 Settable from the Mac: shutter, clock. Everything else lives on the camera body.
 
-- **Webcam over USB: not possible** on stock firmware (no live view). Options: the AV-out cable into a USB
-  capture dongle (SD quality), or your iPhone via Continuity Camera.
+- **Webcam over USB: not possible** on stock firmware (no live view). Best bet: the **mini-HDMI port → a USB HDMI
+  capture dongle** (~₹1,500), which macOS sees as a webcam. Untested: whether the camera sends its live shooting screen
+  over HDMI or only playback (the manual documents playback only). The composite AV cable + EasyCap dongle is the SD fallback.
+- **TV remote over HDMI-CEC** controls playback (browse photos, play movies) but not the shutter.
+- **No Eye-Fi menu**, so a Wi-Fi SD card (e.g. ez Share) works only as a standalone transfer card.
 - **Real long exposure (seconds-long single shot): not possible over USB.** The camera picks shutter speed itself.
   It needs firmware changes (see below). The stacking mode is the stopgap: it simulates trails/smoothing, with
   ~4 s gaps between frames.

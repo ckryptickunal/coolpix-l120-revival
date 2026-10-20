@@ -93,8 +93,11 @@ def import_card(cam: L120, only_new=True, delete_after=False) -> dict:
     dest = OUT_ROOT / "card-import"
     dest.mkdir(parents=True, exist_ok=True)
     copied, skipped = [], 0
+    folder_names = cam.folders()
     for info in cam.list_files():
-        target = dest / info.filename
+        # 100NIKON and 101NIKON can contain the same filename; keep them apart
+        target = dest / folder_names.get(info.parent, "unknown") / info.filename
+        target.parent.mkdir(exist_ok=True)
         if only_new and target.exists() and target.stat().st_size == info.size:
             skipped += 1
             continue

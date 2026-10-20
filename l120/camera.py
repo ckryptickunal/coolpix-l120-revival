@@ -8,6 +8,7 @@ What the L120 exposes over USB (probed on firmware V1.1):
 from __future__ import annotations
 
 import datetime as dt
+import re
 import fcntl
 import struct
 import subprocess
@@ -81,7 +82,7 @@ class L120:
         self.dev = None
         self._tid = 0
         self._evbuf = bytearray()
-        self._known: set[int] | None = None  # handles present on the card
+        self._folder: int | None = None  # current shooting folder handle
 
     # ---------- connection ----------
     def connect(self, attempts: int = 8, lock_timeout_s: float = 600):
@@ -245,12 +246,36 @@ class L120:
         name = r.s(); captured = r.s()
         return ObjectInfo(handle, name, size, fmt, parent, captured, w, h)
 
-    def _handles(self) -> list[int]:
-        return _Reader(self._ok(0x1007, (0xFFFFFFFF, 0, 0))[0]).arr("I")
+    def _handles(self, parent: int = 0, fmt: int = 0) -> list[int]:
+        """parent=0: whole card (SLOW on the L120, 40-60 s). parent=<folder>: one folder (instant).
+        parent=0xFFFFFFFF: card root only."""
+        return _Reader(self._ok(0x1007, (0xFFFFFFFF, fmt, parent))[0]).arr("I")
+
+    def shooting_folder(self) -> int:
+        """Handle of the folder new shots go to (highest xxxNIKON under DCIM), found without a full listing."""
+        dcim = [h for h in self._handles(0xFFFFFFFF) if self.object_info(h).filename.upper() == "DCIM"]
+        if not dcim:
+            raise CameraError("No DCIM folder on card")
+        folders = [(self.object_info(h).filename, h) for h in self._handles(dcim[0])]
+        folders = [f for f in folders if re.fullmatch(r"\d{3}\w{5}", f[0])]
+        if not folders:
+            raise CameraError("No image folder under DCIM")
+        return max(folders)[1]
+
+    def folders(self) -> dict[int, str]:
+        """Image folders under DCIM, {handle: name}. Fast (no full-card listing)."""
+        dcim = [h for h in self._handles(0xFFFFFFFF) if self.object_info(h).filename.upper() == "DCIM"]
+        if not dcim:
+            return {}
+        return {h: self.object_info(h).filename for h in self._handles(dcim[0])
+                if self.object_info(h).format == 0x3001}
 
     def list_files(self) -> list[ObjectInfo]:
-        infos = [self.object_info(h) for h in self._handles()]
-        return [i for i in infos if i.format != 0x3001]  # skip folders
+        """All photos/videos, walked folder by folder (the whole-card query takes ~60 s on the L120)."""
+        out = []
+        for fh in self.folders():
+            out += [i for i in (self.object_info(h) for h in self._handles(fh)) if i.format != 0x3001]
+        return out
 
     def download(self, handle: int) -> bytes:
         return self._ok(0x1009, (handle,), what="Download")[0]
@@ -260,44 +285,42 @@ class L120:
 
     def delete(self, handle: int):
         self._ok(0x100B, (handle, 0), what="Delete")
-        if self._known is not None:
-            self._known.discard(handle)
 
     # ---------- shooting ----------
-    def capture(self, keep_on_card: bool = True, timeout_s: float = 30) -> tuple[bytes, ObjectInfo]:
-        """Fire the shutter (camera does its own AF + metering), return the JPEG."""
-        # Primary signal: the ObjectAdded event (arrives ~4 s after the shutter).
-        # The L120's event pipe sometimes drops packets, so if it stays silent we
-        # fall back to the object list: new objects always get the highest handle.
-        # (Listing is slow the first time per session: the camera indexes the card.)
-        # SAFETY: the camera reuses object handles after deletes, so "highest
-        # handle" is NOT proof of a new file. A handle counts as our capture only
-        # if it was absent from a snapshot taken right before the shutter.
-        # (The first snapshot per session is slow, ~60 s, while the camera
-        # indexes the card; later ones are fast.)
-        if self._known is None:
-            self._known = set(self._handles())
-        before = set(self._known)
-        self.drain_events()
+    def capture(self, keep_on_card: bool = True, timeout_s: float = 40) -> tuple[bytes, ObjectInfo]:
+        """Fire the shutter (camera does its own AF + metering), return the JPEG.
+
+        The L120 never delivers PTP events on macOS here, and a full card listing
+        takes 40-60 s, so we watch only the current shooting folder (instant).
+        SAFETY: the camera reuses object handles after deletes, so a handle counts
+        as our capture only if it was absent from a snapshot taken right before
+        the shutter, and exactly one new file appeared.
+        """
+        if self._folder is None:
+            self._folder = self.shooting_folder()
+        before = set(self._handles(self._folder))
+        folders_before = None
         self._ok(0x100E, (0, 0), what="Capture")
         handle, start = None, time.time()
         while time.time() - start < timeout_s and handle is None:
-            for code, params in self._read_events(500):
-                if code == 0x4002 and params and params[0] not in before:
-                    handle = params[0]
-            if handle is None and time.time() - start > 3:
-                new = [h for h in self._handles() if h not in before]
-                handle = new[0] if len(new) == 1 else None
-                if len(new) > 1:
-                    raise CameraError(f"Ambiguous: {len(new)} new files appeared; not touching any")
+            time.sleep(0.5)
+            new = [h for h in self._handles(self._folder) if h not in before]
+            if len(new) > 1:
+                raise CameraError(f"Ambiguous: {len(new)} new files appeared; not touching any")
+            handle = new[0] if new else None
+            if handle is None and time.time() - start > 15 and folders_before is None:
+                # camera may have rolled over to a new folder (e.g. 102NIKON)
+                folders_before = self._folder
+                nf = self.shooting_folder()
+                if nf != self._folder:
+                    self._folder = nf
+                    before = set()  # brand-new folder: everything in it is ours
         if handle is None:
             raise CameraError("Camera fired but no new photo appeared (card full, or camera in playback mode?)")
-        self._known.add(handle)
         info = self.object_info(handle)
         data = self.download(handle)
         if len(data) != info.size:
             raise CameraError(f"Short download: {len(data)} of {info.size} bytes")
         if not keep_on_card:
             self.delete(handle)
-            self._known.discard(handle)
         return data, info

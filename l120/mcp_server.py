@@ -74,45 +74,73 @@ def timelapse(count: int = 30, interval_seconds: float = 10, fps: int = 24) -> d
     return _run(lambda cam: features.timelapse(cam, count, interval_seconds, fps))
 
 
+def _card_files(cam):
+    """[(path 'FOLDER/NAME', info)] — paths are unique even when folders share filenames."""
+    names = cam.folders()
+    return [(f"{names.get(i.parent, '?')}/{i.filename}", i) for i in cam.list_files()]
+
+
+def _find(cam, path: str):
+    path = path.upper()
+    hits = [(p, i) for p, i in _card_files(cam) if p.upper() == path or (
+        "/" not in path and i.filename.upper() == path)]
+    if not hits:
+        raise CameraError(f"{path} not on card")
+    if len(hits) > 1:
+        raise CameraError(f"{path} is ambiguous, use one of: {[p for p, _ in hits]}")
+    return hits[0]
+
+
 @mcp.tool()
-def list_card(limit: int = 50) -> dict:
-    """List photos and videos on the SD card (newest last)."""
+def list_card(limit: int = 50, folder: str = "") -> dict:
+    """List photos and videos on the SD card as FOLDER/NAME (e.g. 101NIKON/DSCN0291.JPG), newest folder last."""
     def f(cam):
-        files = cam.list_files()
+        files = [(p, i) for p, i in _card_files(cam) if not folder or p.upper().startswith(folder.upper())]
         return {"total": len(files), "files": [
-            {"name": i.filename, "kb": i.size // 1024, "taken": i.captured, "handle": i.handle}
-            for i in files[-limit:]]}
+            {"path": p, "kb": i.size // 1024, "taken": i.captured} for p, i in files[-limit:]]}
     return _run(f)
 
 
 @mcp.tool()
-def card_thumbnail(name: str) -> list:
-    """Show the thumbnail of a file on the card by filename (e.g. DSCN0290.JPG)."""
+def card_thumbnail(path: str) -> list:
+    """Show the thumbnail of a card file, e.g. 101NIKON/DSCN0291.JPG (bare filename works if unique)."""
     def f(cam):
-        for i in cam.list_files():
-            if i.filename.upper() == name.upper():
-                return [i.filename, _preview(cam.thumbnail(i.handle), 320)]
-        raise CameraError(f"{name} not on card")
+        p, i = _find(cam, path)
+        return [p, _preview(cam.thumbnail(i.handle), 320)]
+    return _run(f)
+
+
+@mcp.tool()
+def download_from_card(path: str) -> list:
+    """Download one full-resolution file from the card to the Mac and preview it."""
+    def f(cam):
+        p, i = _find(cam, path)
+        out = features.OUT_ROOT / "card-import" / p
+        out.parent.mkdir(parents=True, exist_ok=True)
+        data = cam.download(i.handle)
+        out.write_bytes(data)
+        res = [f"Saved {out}"]
+        if i.format == 0x3801:
+            res.append(_preview(data))
+        return res
     return _run(f)
 
 
 @mcp.tool()
 def import_card(only_new: bool = True) -> dict:
-    """Copy photos and videos from the SD card to the Mac (captures/card-import). Never deletes from the card."""
+    """Copy all photos and videos from the SD card to the Mac (captures/card-import/<folder>/). Never deletes from the card."""
     return _run(lambda cam: features.import_card(cam, only_new=only_new, delete_after=False))
 
 
 @mcp.tool()
-def delete_from_card(name: str, confirm: bool = False) -> str:
-    """Permanently delete one file from the SD card. Requires confirm=true."""
+def delete_from_card(path: str, confirm: bool = False) -> str:
+    """Permanently delete one file from the SD card, e.g. 101NIKON/DSCN0291.JPG. Requires confirm=true."""
     if not confirm:
         return "Not deleted: pass confirm=true to permanently delete this file from the card."
     def f(cam):
-        for i in cam.list_files():
-            if i.filename.upper() == name.upper():
-                cam.delete(i.handle)
-                return f"Deleted {i.filename}"
-        raise CameraError(f"{name} not on card")
+        p, i = _find(cam, path)
+        cam.delete(i.handle)
+        return f"Deleted {p}"
     return _run(f)
 
 
