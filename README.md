@@ -74,20 +74,28 @@ Settable from the Mac: shutter, clock. Everything else lives on the camera body.
 
 ## Custom firmware: where it stands
 
-- Nikon's only update is **v1.1** (`firmware/firmware.bin` inside `F-L120-V11M.dmg`); your camera already runs it.
-- Chip: Nikon "EXPEED C2" (vendor unconfirmed). Indirect evidence says ARM.
-- Nobody has published hacks for the L120. A one-day-old, unverified project patches the firmware of the
-  COOLPIX P7000 (same EXPEED C2 generation) through the normal SD-card update path:
-  https://github.com/huwanduf/P7000-SCN-Firmware — the best lead.
-- `rea` (morluto/rea) is an LLM-agent wrapper around Ghidra; usable once we know the CPU (ARM LE) and load address.
-  Ghidra directly is the more flexible starting point.
+Full analysis: [docs/firmware/ANALYSIS.md](docs/firmware/ANALYSIS.md) (independently re-verified). **Nothing has been flashed.**
 
-### Roadmap
-1. Download the official v1.1 file and analyse `firmware.bin`: encryption/entropy, checksums, ARM code, load address. (No risk to the camera.)
-2. Find the exposure tables (max shutter time per scene mode, e.g. Fireworks) and the menu code.
-3. Only if the file is understood and checksums can be recomputed: a minimal "hello" patch (e.g. change a menu string), flashed via SD card.
-   **This step can brick the camera.** It needs your explicit go-ahead.
-4. Then real features: longer shutter limits, manual exposure, RAW dump, intervalometer on-camera.
+- Nikon's v1.1 `firmware.bin` is **unencrypted 32-bit ARM**, protected only by four simple per-section byte sums
+  that `tools/firmware/fwcontainer.py` recomputes. No signature.
+- The camera already contains a hidden **Manual / Shutter-priority exposure engine (30 s … 1/8000 s, plus Bulb)**,
+  used only by factory test paths.
+- The 4 s Fireworks limit is a single constant, so 8/15/30 s is a 4-byte patch (sensor behaviour past 4 s untested).
+- A factory RAW dumper exists (RAW format not decoded yet).
+
+| Feature | Verdict |
+|---|---|
+| Longer Fireworks exposure (8–30 s) | Likely works: tiny data patch |
+| Manual shutter/ISO | Feasible: engine exists, needs a UI hook |
+| Bulb / 60 s | Feasible later |
+| RAW | Promising |
+| HDMI live view | Unknown, test stock first |
+| USB remote exposure/zoom | Not in stock; a later code patch could add it |
+
+**Next step (needs the owner):** flash the harmless step-1 test patch, which changes only the EXIF "Software"
+text, to prove the camera accepts a rebuilt image. Then the long-exposure patch. Exact steps and the rollback
+are in [docs/firmware/FLASHING.md](docs/firmware/FLASHING.md). Nikon's firmware is never included in this repo:
+download it from Nikon.
 
 ## L120 Studio (web app)
 
