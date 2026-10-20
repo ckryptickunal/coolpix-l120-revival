@@ -18,6 +18,7 @@ from pathlib import Path
 
 import usb.core
 
+from .features import stamp_mtime as _stamp_mtime
 from .camera import L120, L120_PID, NIKON_VID, CameraError, _backend
 
 DEFAULT_DEST = Path.home() / "Pictures" / "Nikon L120"
@@ -57,6 +58,7 @@ def import_new(dest: Path = DEFAULT_DEST, to_photos=False, sync_clock=True) -> d
             if len(data) != info.size:
                 continue  # incomplete transfer; retry next time
             target.write_bytes(data)
+            _stamp_mtime(target, info.captured)
             seen[key] = info.size
             new_files.append(target)
             STATE.write_text(json.dumps(state))  # checkpoint after every file

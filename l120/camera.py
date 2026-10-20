@@ -8,6 +8,7 @@ What the L120 exposes over USB (probed on firmware V1.1):
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 import fcntl
 import struct
@@ -86,6 +87,15 @@ class L120:
 
     # ---------- connection ----------
     def connect(self, attempts: int = 8, lock_timeout_s: float = 600):
+        # By default go through the broker process, which keeps the USB claim so
+        # macOS's Image Capture service can't grab (and stall) the camera between
+        # operations. L120_DIRECT=1 talks to USB from this process instead.
+        if not getattr(self, "_direct", False) and os.environ.get("L120_DIRECT") != "1":
+            from .broker import Client, ensure_broker
+            ensure_broker()
+            self.__class__ = RemoteL120
+            self._client = Client()
+            return self
         # Only one process can talk to the camera; serialize across processes.
         self._lockf = open(LOCK_PATH, "w")
         start = time.time()
@@ -115,7 +125,8 @@ class L120:
                 time.sleep(0.4)
         else:
             raise CameraError(f"Could not claim the camera: {last}")
-        rc, _, _ = self._transact(0x1002, (1,))  # OpenSession
+        # The camera may still be busy serving macOS's card listing (~60 s): wait it out.
+        rc, _, _ = self._transact(0x1002, (1,), timeout=120000)  # OpenSession
         if rc not in (OK, 0x201E):  # 0x201E = session already open
             raise CameraError(f"OpenSession failed: {hex(rc)}")
         self.drain_events()
@@ -150,7 +161,7 @@ class L120:
         self._tid += 1
         tid = self._tid
         self.dev.write(self.OUT, struct.pack("<IHHI", 12 + 4 * len(params), 1, code, tid)
-                       + b"".join(struct.pack("<I", p) for p in params), timeout=5000)
+                       + b"".join(struct.pack("<I", p) for p in params), timeout=timeout)
         if data_out is not None:
             self.dev.write(self.OUT, struct.pack("<IHHI", 12 + len(data_out), 2, code, tid) + data_out,
                            timeout=timeout)
@@ -225,7 +236,7 @@ class L120:
         return _Reader(self._prop(0x5011)).s()
 
     def set_clock(self, when: dt.datetime | None = None) -> str:
-        when = when or dt.datetime.now()
+        when = dt.datetime.fromisoformat(when) if isinstance(when, str) else (when or dt.datetime.now())
         self._ok(0x1016, (0x5011,), _ptp_str(when.strftime("%Y%m%dT%H%M%S")), "Set clock")
         return self.clock()
 
@@ -324,3 +335,55 @@ class L120:
         if not keep_on_card:
             self.delete(handle)
         return data, info
+
+
+class RemoteL120(L120):
+    """Same API as L120, served by the broker process (see broker.py)."""
+
+    def close(self):
+        if getattr(self, "_client", None):
+            self._client.close()
+            self._client = None
+
+    def _c(self, method, *args):
+        return self._client.call(method, *args)
+
+    def device_info(self):
+        return self._c("device_info")[0]
+
+    def battery(self):
+        return self._c("battery")[0]
+
+    def clock(self):
+        return self._c("clock")[0]
+
+    def set_clock(self, when=None):
+        return self._c("set_clock")[0] if when is None else self._c("set_clock", when.isoformat())[0]
+
+    def storage(self):
+        return self._c("storage")[0]
+
+    def folders(self):
+        return {int(k): v for k, v in self._c("folders")[0].items()}
+
+    def shooting_folder(self):
+        return self._c("shooting_folder")[0]
+
+    def object_info(self, handle):
+        return ObjectInfo(**self._c("object_info", handle)[0])
+
+    def list_files(self):
+        return [ObjectInfo(**d) for d in self._c("list_files")[0]]
+
+    def download(self, handle):
+        return self._c("download", handle)[1]
+
+    def thumbnail(self, handle):
+        return self._c("thumbnail", handle)[1]
+
+    def delete(self, handle):
+        self._c("delete", handle)
+
+    def capture(self, keep_on_card=True, timeout_s=40):
+        r, data = self._c("capture", keep_on_card, timeout_s)
+        return data, ObjectInfo(**r["info"])

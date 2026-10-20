@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from .autorotate import open_upright
 from PIL import Image, ImageFilter, ImageOps
 
 from .video import FFMPEG, FFPROBE, H264, convert
@@ -83,7 +84,7 @@ class _Shot:
 
 
 def _prepare(path, W: int, H: int, rng: random.Random, headroom: float = 1.18) -> _Shot:
-    im = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    im = open_upright(path).convert("RGB")
     sup = 1.15  # supersample so the tightest zoom is still >= 1:1 (no upscaling blur)
     cw, ch = int(W * headroom * sup), int(H * headroom * sup)
     ar, tar = im.width / im.height, W / H
@@ -212,7 +213,7 @@ def _thumb(src: Path, dst: Path, size: int, quality: int) -> tuple[int, int]:
     if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
         with Image.open(dst) as im:
             return im.size
-    im = ImageOps.exif_transpose(Image.open(src)).convert("RGB")
+    im = open_upright(src).convert("RGB")
     im.thumbnail((size, size), Image.LANCZOS)
     im.save(dst, "JPEG", quality=quality, optimize=True, progressive=True)
     return im.size

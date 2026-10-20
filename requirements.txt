@@ -3,5 +3,5 @@ numpy
 pillow
 mcp>=2
 piexif>=1.1
-opencv-python-headless
+opencv-python-headless>=4.9,<5  # 4.x bundles the Haar face data used by lab.autorotate
 segno>=1.5

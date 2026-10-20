@@ -28,12 +28,12 @@ Full researched feature roadmap (what other camera hacks such as CHDK and Magic 
 
 | Feature | Status |
 |---|---|
-| Remote shutter from the Mac, full 14 MP JPEG | ✅ ~4–5 s per shot |
+| Remote shutter from the Mac, full 14 MP JPEG | ✅ 4.6–4.8 s per shot (gphoto2: 18.6 s) |
 | Simulated long exposure (light trails, silky water, remove passers-by) | ✅ |
 | Timelapse → MP4 | ✅ min interval ≈ 5 s |
 | Card browser, thumbnails, import (per folder, never deletes) | ✅ |
-| Camera clock fix (it resets to 2011-01-01 on battery swaps) | built, not yet run on the camera |
-| Plug-and-go auto-import (+ optional Apple Photos → iPhone) | built, not yet run on the camera |
+| Camera clock fix (it resets to 2011-01-01 on battery swaps) | ✅ new photos carry the right date |
+| Plug-and-go auto-import (+ optional Apple Photos → iPhone) | ✅ 315 files / 1.7 GB in 4 min 21 s, size-checked, files keep the camera's dates |
 
 **Lab: new photo powers on the Mac** (tested on real L120 frames; see `docs/lab/`)
 
@@ -51,6 +51,7 @@ Full researched feature roadmap (what other camera hacks such as CHDK and Magic 
 | Film looks | 8 presets (Kodachrome, Portra, Velvia, classic chrome, B&W red filter, teal-orange, CCD glow, faded) + the classic orange date stamp |
 | Video tools | Web-ready MP4, stabilisation, smooth slow-mo, GIFs, best-frame grab |
 | Memories | Self-contained HTML album, Ken Burns slideshow with music, "On this day" |
+| Smart auto-rotate | The L120 has no orientation sensor; face + eye detection turns sideways portraits upright in albums/slideshows (19/21 right on a real card, skips when unsure) |
 
 **MCP server `nikon-l120`** (registered in Claude Code): 17 tools, from `take_photo`, `night_mode`, `long_exposure` and
 `timelapse` to `list_card`, `import_card`, `merge_photos`, `analyze_photo`, `cull_photos`, `apply_film_look`, `video_tool`
@@ -141,7 +142,11 @@ cd ~/Desktop/l120 && .venv/bin/python -c "from l120 import L120, features; c=L12
 Or just ask Claude: "take a photo with the L120", "do a 20-frame light-trail long exposure", "timelapse 60 shots every 10 s".
 
 Output lands in `captures/`. Notes:
-- macOS's Image Capture daemon grabs the camera; the driver kills it on connect (it respawns, harmless).
+- **Camera broker:** macOS's Image Capture service grabs the camera whenever a program lets go and then keeps it
+  busy for ~60 s with a card listing (this also wedged it). So one background process (`l120/broker.py`) holds
+  the camera and every client (Studio, MCP, scripts) talks to it; it starts on demand and lets go after 20 idle
+  minutes. Result: MCP calls went from 65–205 s to 0–23 s. `L120_DIRECT=1` bypasses it.
+- End-to-end check of all MCP tools on the real camera: `.venv/bin/python tools/mcp_smoke.py`.
 - A whole-card listing takes ~60 s on this camera; the driver lists folder by folder instead (instant).
 - Plug-and-go: `python -m l120.autoimport --watch` (or `--install-agent` to run at login; add `--photos` for Apple Photos).
 - Set the camera to shooting mode (not playback) and disable Auto off in the Setup menu for long sessions.

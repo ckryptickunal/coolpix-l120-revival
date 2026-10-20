@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -13,6 +14,18 @@ from PIL import Image
 from .camera import L120
 
 OUT_ROOT = Path(__file__).resolve().parent.parent / "captures"
+
+
+def stamp_mtime(path: Path, captured: str):
+    """Give an imported file the camera's capture time (PTP 'YYYYMMDDTHHMMSS') as its
+    modification time, so apps that sort by file date show it in the right place."""
+    try:
+        t = dt.datetime.strptime(captured[:15], "%Y%m%dT%H%M%S")
+    except ValueError:
+        return
+    if t.year >= 2000:
+        ts = t.timestamp()
+        os.utime(path, (ts, ts))
 
 
 def _session_dir(kind: str) -> Path:
@@ -130,6 +143,7 @@ def import_card(cam: L120, only_new=True, delete_after=False) -> dict:
             skipped += 1
             continue
         target.write_bytes(cam.download(info.handle))
+        stamp_mtime(target, info.captured)
         copied.append(info.filename)
         if delete_after and target.stat().st_size == info.size:
             cam.delete(info.handle)
