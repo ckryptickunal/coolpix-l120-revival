@@ -1,0 +1,33 @@
+Camera summary:
+Manufacturer: Nikon Corporation
+Model: L120
+  Version: COOLPIX L120V1.1
+  Serial Number: <redacted>
+Vendor Extension ID: 0xa (1.0)
+Vendor Extension Description: microsoft.com: 1.0;
+
+Capture Formats: JPEG
+Display Formats: Undefined Type, JPEG, Association/Directory, DPOF, Apple Quicktime, Defined Type
+
+Device Capabilities:
+	File Download, File Deletion, File Upload
+	Generic Image Capture, No Open Capture, No vendor specific capture
+
+Storage Devices Summary:
+store_00010001:
+	StorageDescription: 
+	VolumeLabel: 
+	Storage Type: Removable RAM (memory card)
+	Filesystemtype: Digital Camera Layout (DCIM)
+	Access Capability: Read-Write
+	Maximum Capability: 4000317440 (3815 MB)
+	Free Space (Bytes): 2120646656 (2022 MB)
+	Free Space (Images): 593
+
+Device Property Summary:
+Battery Level             (5001 ro u8 ): Enumeration [2,5,25,50,65,80,100] value: 80% (80)
+Date & Time               (5011 rw str): '20110101T000000'
+[Unknown Property]        (d005 ro u16): Enumeration [1,2] value: 1
+[Unknown Property]        (d407 ro u32): 1
+UseDeviceStageFlag        (d303 ro u8 ): 1
+

@@ -1,0 +1,4 @@
+pyusb>=1.2
+numpy
+pillow
+mcp>=2

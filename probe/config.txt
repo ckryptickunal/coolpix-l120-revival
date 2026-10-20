@@ -1,0 +1,126 @@
+/main/actions/bulb
+Label: Bulb Mode
+Readonly: 0
+Type: TOGGLE
+Current: 2
+END
+/main/actions/opcode
+Label: PTP Opcode
+Readonly: 0
+Type: TEXT
+Current: 0x1001,0xparam1,0xparam2
+END
+/main/settings/datetime
+Label: Camera Date and Time
+Readonly: 0
+Type: DATE
+Current: 1293820200
+Printable: Sat Jan  1 00:00:00 2011
+Help: Use 'now' as the current time when setting.
+
+END
+/main/settings/thumbsize
+Label: Thumb Size
+Readonly: 0
+Type: RADIO
+Current: 
+Choice: 0 normal
+Choice: 1 large
+END
+/main/settings/fastfs
+Label: Fast Filesystem
+Readonly: 0
+Type: TOGGLE
+Current: 1
+END
+/main/settings/capturetarget
+Label: Capture Target
+Readonly: 0
+Type: RADIO
+Current: Internal RAM
+Choice: 0 Internal RAM
+Choice: 1 Memory card
+END
+/main/settings/autofocus
+Label: Autofocus
+Readonly: 0
+Type: RADIO
+Current: On
+Choice: 0 On
+Choice: 1 Off
+END
+/main/status/serialnumber
+Label: Serial Number
+Readonly: 1
+Type: TEXT
+Current: <redacted>
+END
+/main/status/manufacturer
+Label: Camera Manufacturer
+Readonly: 1
+Type: TEXT
+Current: Nikon Corporation
+END
+/main/status/cameramodel
+Label: Camera Model
+Readonly: 1
+Type: TEXT
+Current: L120
+END
+/main/status/deviceversion
+Label: Device Version
+Readonly: 1
+Type: TEXT
+Current: COOLPIX L120V1.1
+END
+/main/status/vendorextension
+Label: Vendor Extension
+Readonly: 1
+Type: TEXT
+Current: microsoft.com: 1.0;
+END
+/main/status/batterylevel
+Label: Battery Level
+Readonly: 1
+Type: TEXT
+Current: 80%
+END
+/main/other/5001
+Label: Battery Level
+Readonly: 1
+Type: MENU
+Current: 80
+Choice: 0 2
+Choice: 1 5
+Choice: 2 25
+Choice: 3 50
+Choice: 4 65
+Choice: 5 80
+Choice: 6 100
+END
+/main/other/5011
+Label: Date & Time
+Readonly: 0
+Type: TEXT
+Current: 20110101T000000
+END
+/main/other/d005
+Label: PTP Property 0xd005
+Readonly: 1
+Type: MENU
+Current: 1
+Choice: 0 1
+Choice: 1 2
+END
+/main/other/d407
+Label: PTP Property 0xd407
+Readonly: 1
+Type: TEXT
+Current: 1
+END
+/main/other/d303
+Label: UseDeviceStageFlag
+Readonly: 1
+Type: TEXT
+Current: 1
+END

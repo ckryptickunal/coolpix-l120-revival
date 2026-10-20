@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+captures/
+firmware/vendor/
+*.dmg
+*.bin
+probe/*.JPG
+probe/*.jpg
+probe/*.log
+.DS_Store
+docs/body-photos/

@@ -1,0 +1,3 @@
+New file is in location /store_00010001/DCIM/101NIKON/DSCN0292.JPG on the camera
+Saving file as remote_1.JPG
+Deleting file /store_00010001/DCIM/101NIKON/DSCN0292.JPG on the camera
