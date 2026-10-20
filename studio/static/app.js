@@ -501,8 +501,7 @@ document.addEventListener("keydown", e => {
   }
   const modes = ["shoot", "stack", "timelapse", "card", "live"];
   if (/^[1-5]$/.test(e.key)) setMode(modes[+e.key - 1]);
-  else if (e.key === " " && ["shoot"].includes(S.mode)) shoot();
-  else if (e.key === " " && S.mode !== "card") setMode("shoot");
+  else if (e.key === " " && S.mode !== "card") { if (S.mode !== "shoot") setMode("shoot"); shoot(); }
   else if (e.key === "Escape" && busy()) run("/api/cancel", {});
   else if (e.key === "Escape" && S.mode === "card") { S.selected.clear(); renderSel(); }
   else if ((e.key === "r" || e.key === "R") && !busy()) refreshStatus();

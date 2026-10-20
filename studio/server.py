@@ -45,6 +45,10 @@ class Busy(Exception):
     """The camera is in use (by a Studio job or by another program)."""
 
 
+class CardChanged(Exception):
+    """A cached card entry no longer matches what the camera reports."""
+
+
 # ---------------------------------------------------------------- events
 
 class Hub:
@@ -228,10 +232,10 @@ class Card:
         """The cached entry, after confirming the handle still points at the same file."""
         e = self.files.get(handle)
         if e is None:
-            raise CameraError("Unknown file. Refresh the card list.")
+            raise CardChanged("Unknown file. Refresh the card list.")
         info = cam.object_info(handle)
         if info.filename != e["name"] or info.size != e["size"]:
-            raise CameraError("The card changed since it was listed. Refresh the card list.")
+            raise CardChanged("The card changed since it was listed. Refresh the card list.")
         return e
 
     def local_path(self, e: dict) -> Path:
@@ -455,7 +459,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send(code, json.dumps(obj).encode(), "application/json", {"Cache-Control": "no-store"})
 
     def error_json(self, e: Exception):
-        code = 409 if isinstance(e, Busy) else 503 if isinstance(e, usb.core.USBError) else 500
+        code = 409 if isinstance(e, (Busy, CardChanged)) else 503 if isinstance(e, usb.core.USBError) else 500
         self.json({"error": friendly_error(e), "busy": isinstance(e, Busy)}, code)
 
     def body(self) -> dict:
