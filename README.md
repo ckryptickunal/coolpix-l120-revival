@@ -84,8 +84,7 @@ cd ~/Desktop/l120 && .venv/bin/python -m studio      # then open http://localhos
 
 How it behaves:
 - One camera operation at a time. Long jobs run in the background and stream progress to the page (Server-Sent Events); `Esc` stops a stack, timelapse or import after the current frame/file.
-- It holds the USB connection while in use and lets go after 90 s idle (`L120_STUDIO_IDLE_S`), so the MCP server and scripts can use the camera. If another program has the camera, the page says so instead of hanging.
-- The first shot or card read after connecting takes ~1 min while the camera indexes the card.
+- It opens the USB connection per operation and lets go ~3 s after (`L120_STUDIO_IDLE_S`), so the MCP server and scripts can use the camera in between. If another program has the camera, the page says so instead of hanging.
 - `L120_STUDIO_FAKE=1 .venv/bin/python -m studio --port 8121` runs it against a simulated camera (output goes to `captures/fake/`), for UI work without the L120.
 - No new dependencies: Python's standard-library HTTP server plus the existing `l120` package.
 

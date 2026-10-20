@@ -2,9 +2,9 @@
 
 One camera conversation at a time. Long work (shoot, stack, timelapse, card
 listing, import) runs as a single background job whose progress is pushed to
-the browser over Server-Sent Events. The USB connection is kept open while the
-Studio is in use and released after a short idle period, so other programs
-(the MCP server, scripts) can get the camera too.
+the browser over Server-Sent Events. The USB connection (and the cross-process
+lock) is released a few seconds after each operation, so other programs (the
+MCP server, scripts) can use the camera between Studio operations.
 """
 from __future__ import annotations
 
@@ -33,7 +33,8 @@ from l120.camera import FORMATS, L120, CameraError
 
 STATIC = Path(__file__).resolve().parent / "static"
 CAPTURES = features.OUT_ROOT
-IDLE_RELEASE_S = float(os.environ.get("L120_STUDIO_IDLE_S", "90"))
+# Grace period so a burst of thumbnail requests shares one connection.
+IDLE_RELEASE_S = float(os.environ.get("L120_STUDIO_IDLE_S", "3"))
 FAKE = os.environ.get("L120_STUDIO_FAKE") == "1"
 IMPORT_DIR = CAPTURES / "card-import"
 if FAKE:  # keep simulated output away from real photos
@@ -164,7 +165,7 @@ class CameraHost:
 
     def _idle_release(self):
         while True:
-            time.sleep(5)
+            time.sleep(1)
             if self.cam is not None and time.time() - self.last_used > IDLE_RELEASE_S:
                 if self.lock.acquire(blocking=False):
                     try:
@@ -310,8 +311,7 @@ def rel_url(p: str | Path | None) -> str | None:
 
 def job_shoot(keep_on_card: bool):
     def fn(cam: L120):
-        hub.update("job", message="Focusing & shooting… (first shot per connection can take ~1 min "
-                                  "while the camera indexes the card)")
+        hub.update("job", message="Focusing & shooting…")
         data, info = cam.capture(keep_on_card=keep_on_card)
         out = features._session_dir("photo") / info.filename
         out.write_bytes(data)
@@ -358,7 +358,7 @@ def job_timelapse(count: int, interval: float, fps: int):
 def job_list_card():
     def fn(cam: L120):
         hub.update("card", listing=True)
-        hub.update("job", message="Reading the card… (the camera indexes it first; can take ~1 min)")
+        hub.update("job", message="Reading the card folder by folder…")
         try:
             infos = cam.list_files()
             files = {}

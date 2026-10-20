@@ -78,9 +78,9 @@ function renderHud(st) {
   const link = $("#hud-link");
   link.classList.toggle("on", st.connected && !busy());
   link.classList.toggle("busy", busy());
-  $(".label", link).textContent = busy() ? "Working" : st.connected ? "USB linked" : "Idle (released)";
-  link.title = st.connected ? "The Studio holds the USB connection. It's released after 90 s idle so other apps can use the camera."
-                            : "Not holding the camera. It connects on demand.";
+  $(".label", link).textContent = busy() ? "Working" : st.connected ? "USB linked" : "Ready";
+  link.title = st.connected ? "The Studio is using the camera; it lets go a few seconds after each operation."
+                            : "Not holding the camera. It connects on demand, so other apps can use it in between.";
   const s = st.status;
   if (!s) return;
   const b = $("#hud-battery");
@@ -252,7 +252,7 @@ $$("#stack-modes button").forEach(b => b.onclick = () => {
 function stackEst() {
   const n = +$("#stack-frames").value;
   $("#stack-frames-out").textContent = n;
-  $("#stack-est").textContent = `≈ ${fmtDur(n * 5 + 60)} total (about 5 s per frame + first-shot warm-up)`;
+  $("#stack-est").textContent = `≈ ${fmtDur(n * 5 + 5)} total (about 5 s per frame)`;
 }
 $("#stack-frames").oninput = stackEst; stackEst();
 $("#btn-stack").onclick = () => run("/api/stack", { frames: +$("#stack-frames").value, mode: S.stackMode });
