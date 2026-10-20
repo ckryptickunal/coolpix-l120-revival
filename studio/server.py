@@ -5,6 +5,9 @@ listing, import) runs as a single background job whose progress is pushed to
 the browser over Server-Sent Events. The USB connection (and the cross-process
 lock) is released a few seconds after each operation, so other programs (the
 MCP server, scripts) can use the camera between Studio operations.
+
+Work on files already on the Mac (darkroom, memories, merges) runs on a second
+job runner ("lab") so it never blocks shooting; see studio/lab.py.
 """
 from __future__ import annotations
 
@@ -23,13 +26,16 @@ from contextlib import contextmanager
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import usb.core
 from PIL import Image
 
 from l120 import features
 from l120.camera import FORMATS, L120, CameraError
+
+from . import lab
+from .remote import Remote
 
 STATIC = Path(__file__).resolve().parent / "static"
 CAPTURES = features.OUT_ROOT
@@ -40,6 +46,8 @@ IMPORT_DIR = CAPTURES / "card-import"
 if FAKE:  # keep simulated output away from real photos
     features.OUT_ROOT = CAPTURES / "fake"
     IMPORT_DIR = features.OUT_ROOT / "card-import"
+lab.init(CAPTURES)
+remote = Remote(False, 8120)   # replaced by serve()
 
 
 class Busy(Exception):
@@ -58,9 +66,11 @@ class Hub:
     def __init__(self):
         self.cond = threading.Condition()
         self.version = 0
+        idle = {"id": 0, "kind": None, "status": "idle", "done": 0, "total": 0,
+                "message": "", "result": None, "error": None, "preview": None}
         self.state = {
-            "job": {"id": 0, "kind": None, "status": "idle", "done": 0, "total": 0,
-                    "message": "", "result": None, "error": None, "preview": None},
+            "job": dict(idle),       # camera job
+            "lab": dict(idle),       # on-Mac processing job
             "status": None,          # last camera status reading
             "connected": False,      # USB session currently open
             "card": {"stamp": 0, "count": None, "listing": False},
@@ -163,6 +173,14 @@ class CameraHost:
             self.last_used = time.time()
             self.lock.release()
 
+    def release_soon(self):
+        """Let go of the camera now (used before slow post-processing)."""
+        if self.cam is not None and self.lock.acquire(blocking=False):
+            try:
+                self.release()
+            finally:
+                self.lock.release()
+
     def _idle_release(self):
         while True:
             time.sleep(1)
@@ -179,7 +197,7 @@ camera = CameraHost()
 
 
 def friendly_error(e: Exception) -> str:
-    if isinstance(e, Busy):
+    if isinstance(e, (Busy, ValueError)):
         return str(e)
     if isinstance(e, usb.core.USBTimeoutError):
         return ("The camera isn't answering over USB. If it's on, switch it off and on again "
@@ -253,37 +271,54 @@ def card_changed():
 # ---------------------------------------------------------------- jobs
 
 class Jobs:
-    def __init__(self):
+    """One background job at a time per runner. section = hub key ("job" or "lab").
+
+    Camera jobs: fn(cam) runs while holding the camera; post(result), if given,
+    runs after the camera is released (e.g. merging frames). Lab jobs: fn(update, stop).
+    """
+
+    def __init__(self, section: str = "job", needs_camera: bool = True):
+        self.section = section
+        self.needs_camera = needs_camera
         self.lock = threading.Lock()
         self.running = False
         self.stop = threading.Event()
         self.preview: bytes | None = None
         self.next_id = 1
 
-    def start(self, kind: str, fn, total: int = 0, message: str = ""):
+    def update(self, **kw):
+        hub.update(self.section, **kw)
+
+    def start(self, kind: str, fn, total: int = 0, message: str = "", post=None):
         with self.lock:
             if self.running:
-                raise Busy(f"Busy: {hub.state['job']['kind']} in progress.")
+                what = "camera" if self.needs_camera else "processing"
+                raise Busy(f"Busy: {hub.state[self.section]['kind']} in progress ({what}).")
             self.running = True
             jid, self.next_id = self.next_id, self.next_id + 1
         self.stop.clear()
         self.preview = None
-        hub.update("job", id=jid, kind=kind, status="running", done=0, total=total,
-                   message=message, result=None, error=None, preview=None, started=time.time())
+        self.update(id=jid, kind=kind, status="running", done=0, total=total,
+                    message=message, result=None, error=None, preview=None, started=time.time())
 
         def run():
             try:
-                with camera.use(wait=60) as cam:
-                    result = fn(cam)
-                    try:
-                        hub.update("status", value=read_status(cam))
-                    except Exception:
-                        pass
-                hub.update("job", status="cancelled" if self.stop.is_set() else "done",
-                           result=result, message="")
+                if self.needs_camera:
+                    with camera.use(wait=60) as cam:
+                        result = fn(cam)
+                        try:
+                            hub.update("status", value=read_status(cam))
+                        except Exception:
+                            pass
+                    camera.release_soon()
+                    if post:
+                        result = post(result)
+                else:
+                    result = fn(self.update, self.stop.is_set)
+                self.update(status="cancelled" if self.stop.is_set() else "done", result=result, message="")
             except Exception as e:
                 traceback.print_exc()
-                hub.update("job", status="error", error=friendly_error(e), message="")
+                self.update(status="error", error=friendly_error(e), message="")
             finally:
                 with self.lock:
                     self.running = False
@@ -300,7 +335,8 @@ class Jobs:
         self.preview = buf.getvalue()
 
 
-jobs = Jobs()
+jobs = Jobs("job", needs_camera=True)
+labjobs = Jobs("lab", needs_camera=False)
 
 
 def rel_url(p: str | Path | None) -> str | None:
@@ -319,7 +355,7 @@ def job_shoot(keep_on_card: bool):
             card.files[info.handle] = card.entry(cam, info)
             card_changed()
         hub.update("job", done=1, total=1)
-        return {"photo": rel_url(out), "name": info.filename, "size": len(data),
+        return {"photo": rel_url(out), "path": lab.rel(out), "name": info.filename, "size": len(data),
                 "width": info.width, "height": info.height, "kept_on_card": keep_on_card}
     return fn
 
@@ -334,7 +370,8 @@ def job_stack(frames: int, mode: str):
                        message="Merging…" if done == total else f"Frame {done + 1} of {total}…")
 
         r = features.stack(cam, frames, mode, progress=progress, should_stop=jobs.stop.is_set)
-        return {**r, "photo": rel_url(r["result"]), "folder": rel_url(r["folder"]), "mode": mode}
+        return {**r, "photo": rel_url(r["result"]), "path": lab.rel(r["result"]) if r["result"] else None,
+                "folder": rel_url(r["folder"]), "mode": mode}
     return fn
 
 
@@ -353,6 +390,34 @@ def job_timelapse(count: int, interval: float, fps: int):
             hub.update("job", message="Rendering MP4 from the frames so far…")
         return {**r, "video": rel_url(r.get("video")), "folder": rel_url(r["folder"])}
     return fn
+
+
+def job_night(frames: int):
+    """Shoot a burst for night mode; the merge runs after the camera is released."""
+    def fn(cam: L120):
+        d = features._session_dir("night")
+        paths = []
+        for i in range(frames):
+            if jobs.stop.is_set():
+                break
+            hub.update("job", message=f"Frame {i + 1} of {frames}… hold still")
+            data, _ = cam.capture(keep_on_card=False)
+            p = d / f"frame_{i + 1:02d}.jpg"
+            p.write_bytes(data)
+            paths.append(p)
+            hub.update("job", done=i + 1, preview=rel_url(p))
+        return paths
+
+    def post(paths):
+        if len(paths) < 2:
+            return {"photo": rel_url(paths[0]) if paths else None, "path": lab.rel(paths[0]) if paths else None,
+                    "label": "Night · too few frames to merge"}
+        hub.update("job", message=f"Aligning and merging {len(paths)} frames… (camera is free again)")
+        out = paths[0].parent / "night.jpg"
+        r = lab.night_merge(paths, out)
+        hub.update("job", done=frames + 1)
+        return {**r, "photo": rel_url(out), "path": lab.rel(out)}
+    return fn, post
 
 
 def job_list_card():
@@ -459,7 +524,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send(code, json.dumps(obj).encode(), "application/json", {"Cache-Control": "no-store"})
 
     def error_json(self, e: Exception):
-        code = 409 if isinstance(e, (Busy, CardChanged)) else 503 if isinstance(e, usb.core.USBError) else 500
+        code = 400 if isinstance(e, ValueError) else 409 if isinstance(e, (Busy, CardChanged)) else 503 if isinstance(e, usb.core.USBError) else 500
         self.json({"error": friendly_error(e), "busy": isinstance(e, Busy)}, code)
 
     def body(self) -> dict:
@@ -475,11 +540,29 @@ class Handler(BaseHTTPRequestHandler):
             extra["Content-Disposition"] = f'attachment; filename="{download_name}"'
         self.send(200, path.read_bytes(), ctype, extra)
 
+    def q(self, name: str, default: str = "") -> str:
+        return parse_qs(urlparse(self.path).query).get(name, [default])[0]
+
+    def gate(self) -> bool:
+        """Access control: loopback with a local Host header, or (with --lan) the phone token."""
+        ok, set_cookie = remote.check(self.client_address[0], self.headers.get("Host", ""), self.path,
+                                      self.headers.get("Cookie"))
+        if not ok:
+            self.send(403, b"Forbidden: open the link from the Studio's phone QR code.", "text/plain")
+            return False
+        if set_cookie:   # trade the ?t= token for a cookie and clean the address bar
+            self.send(303, b"", "text/plain", {"Location": urlparse(self.path).path or "/",
+                                               "Set-Cookie": remote.cookie()})
+            return False
+        return True
+
     # -- routes
     def do_HEAD(self):
         self.do_GET()
 
     def do_GET(self):
+        if not self.gate():
+            return
         path = unquote(urlparse(self.path).path)
         try:
             if path in ("/", "/index.html"):
@@ -504,6 +587,29 @@ class Handler(BaseHTTPRequestHandler):
                 return self.card_object(m.group(1), int(m.group(2)))
             if path == "/api/liveview/devices":
                 return self.json({"devices": video_devices()})
+            # ---- on-Mac library, reports, darkroom, memories
+            if path == "/api/library":
+                return self.json({"files": lab.library()})
+            if path == "/api/thumb":
+                return self.send(200, lab.thumb(self.q("path"), int(self.q("size", "360"))), "image/jpeg",
+                                 {"Cache-Control": "max-age=600"})
+            if path == "/api/report":
+                return self.json(lab.report(self.q("path")))
+            if path == "/api/looks":
+                return self.json({"looks": lab.look_list()})
+            if path == "/api/look":
+                return self.send(200, lab.look_preview(self.q("path"), self.q("look", "original"),
+                                                       int(self.q("size", "240")), self.q("date") == "1"),
+                                 "image/jpeg", {"Cache-Control": "max-age=600"})
+            if path == "/api/memories/folders":
+                return self.json({"folders": lab.memory_folders()})
+            if path == "/api/memories/onthisday":
+                return self.json(lab.on_this_day(self.q("folder", "card-import"), self.q("date") or None,
+                                                 int(self.q("window", "0"))))
+            if path == "/api/remote":
+                local = ipaddress_is_loopback(self.client_address[0])
+                return self.json({"enabled": remote.enabled, "url": remote.url if local else None,
+                                  "qr": remote.qr_svg() if local else None, "phone": not local})
             return self.json({"error": "not found"}, 404)
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -512,7 +618,12 @@ class Handler(BaseHTTPRequestHandler):
             self.error_json(e)
 
     def do_POST(self):
+        if not self.gate():
+            return
         path = urlparse(self.path).path
+        # JSON only: browsers can't send that cross-site without a CORS preflight we never grant.
+        if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return self.json({"error": "JSON body required"}, 415)
         try:
             b = self.body()
             if path == "/api/status":
@@ -551,6 +662,30 @@ class Handler(BaseHTTPRequestHandler):
                 if not 2 <= count <= 5000 or interval < 5 or not 1 <= fps <= 60:
                     return self.json({"error": "Count 2–5000, interval ≥ 5 s, fps 1–60."}, 400)
                 return self.json({"job": jobs.start("timelapse", job_timelapse(count, interval, fps), count)})
+            if path == "/api/night":
+                frames = int(b.get("frames", 6))
+                if not 2 <= frames <= 20:
+                    return self.json({"error": "Frames must be 2–20."}, 400)
+                fn, post = job_night(frames)
+                return self.json({"job": jobs.start("night", fn, frames + 1, post=post)})
+            if path == "/api/lab/look":
+                return self.json({"job": labjobs.start("look", lab.job_apply_look(
+                    b.get("path", ""), b.get("look", ""), bool(b.get("datestamp"))))})
+            if path == "/api/lab/fusion":
+                return self.json({"job": labjobs.start("hdr", lab.job_fusion(b.get("paths", [])))})
+            if path == "/api/lab/panorama":
+                return self.json({"job": labjobs.start("panorama", lab.job_panorama(b.get("paths", [])))})
+            if path == "/api/lab/night":
+                return self.json({"job": labjobs.start("night merge", lab.job_night_merge(b.get("paths", [])))})
+            if path == "/api/memories/album":
+                return self.json({"job": labjobs.start("album", lab.job_album(
+                    b.get("folder", "card-import"), b.get("title", "")))})
+            if path == "/api/memories/slideshow":
+                secs = float(b.get("seconds", 3))
+                if not 1 <= secs <= 15:
+                    return self.json({"error": "Seconds per photo must be 1–15."}, 400)
+                return self.json({"job": labjobs.start("slideshow", lab.job_slideshow(
+                    b.get("folder", "card-import"), secs, b.get("paths") or None))})
             if path == "/api/card/list":
                 return self.json({"job": jobs.start("card", job_list_card())})
             if path == "/api/card/import":
@@ -630,12 +765,21 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
 
-def serve(host="127.0.0.1", port=8120):
+def ipaddress_is_loopback(ip: str) -> bool:
+    import ipaddress
+    a = ipaddress.ip_address(ip.split("%")[0])
+    return a.is_loopback or bool(getattr(a, "ipv4_mapped", None) and a.ipv4_mapped.is_loopback)
+
+
+def serve(port=8120, lan=False):
+    global remote
     CAPTURES.mkdir(parents=True, exist_ok=True)
-    httpd = ThreadingHTTPServer((host, port), Handler)
+    remote = Remote(lan, port)
+    httpd = ThreadingHTTPServer(("0.0.0.0" if lan else "127.0.0.1", port), Handler)
     httpd.daemon_threads = True
     print(f"L120 Studio running at http://localhost:{port}{'  [FAKE CAMERA]' if FAKE else ''}  (Ctrl+C to stop)",
           flush=True)
+    remote.print_banner()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
