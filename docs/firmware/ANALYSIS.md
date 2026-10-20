@@ -166,7 +166,7 @@ one by a field at UI struct `0x57EF3908+0x50`. Retail code only ever writes 0 to
 
 ```c
 if (cam->scene == 1) {            // fixed-exposure scene
-    FUN_00163168();               // ISO = base gain (0xB3), shutter_acq = *(u32*)0x163A08 (= 4,000,000)
+    FUN_00163168();               // ISO = FUN_00167430() (returns base gain 0xB3, or 0xE7 in one mode), shutter_acq = *(u32*)0x163A08 (= 4,000,000)
     return;                       // no slow-shutter clamp on this path
 }
 ... normal AE ...
@@ -216,7 +216,7 @@ shutter_acq = min(shutter_acq, slow_limit());  // slow limit from table 0x53CF10
 
 ## 6. USB / PTP (confirmed)
 
-DeviceInfo lists are built by `FUN_0012a85c` from tables at `0x5358D8` (PTP) and `0x535908` (MTP):
+DeviceInfo lists are built by `FUN_0012a85c` from two table sets, selected by a mode argument (0 or 3). Their operation lists (`0x535908`, `0x5358D8`) are identical:
 
 - Operations: 0x1001–0x100F, 0x1014–0x1016, 0x101B and MTP 0x9801–0x9803/0x9805. Includes InitiateCapture
   0x100E.
@@ -248,7 +248,8 @@ earlier USB probe. Remote exposure control over USB would need a new code patch.
 - Therefore:
   1. **Only patch code or data that runs after boot and only in a specific mode or action.** All three
      candidates qualify:
-     - EXIF string: read only when writing a JPEG.
+     - EXIF string: read by the EXIF tag builder (`FUN_003f9018`) and by one other routine (`FUN_00370af0`),
+       probably the USB DeviceInfo version string. Neither runs during boot.
      - Fireworks literal: read only in the Fireworks capture branch.
      - RAW hook: runs only after a capture.
   2. Never change lengths, section sizes, `LOADADDRESS`, NLIPI, the VR sub-firmware, or boot/init code.
@@ -272,7 +273,8 @@ Each step is a separate flash. Do not combine steps until each has passed on its
   terminator untouched).
 - **Why it's safe:** the string is returned by a one-line getter (`0x32F104`: `ldr r0,=0x56EA60; bx lr`).
   Real L120 photos carry exactly this text in their EXIF Software tag; checked against a photo in
-  `captures/`.
+  `captures/`. The getter has a second caller (`FUN_00370af0`), probably the USB DeviceInfo version string,
+  so that text may change over USB too.
 - **Build:**
   ```bash
   python3 -I tools/firmware/build_patch.py firmware/vendor/extracted/L120Update/firmware/firmware.bin \
