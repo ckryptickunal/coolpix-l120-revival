@@ -1,5 +1,11 @@
 # Flashing the step-1 test patch (and rolling back)
 
+> **✅ Confirmed on real hardware (2026-10-20):** the step-1 EXIF patch was flashed to a COOLPIX L120 through the
+> normal Setup → Firmware version menu. The camera accepted the rebuilt image, now reports `L120 REVIVAL 0.1` as its
+> PTP DeviceVersion and in EXIF Software, and shoots normally (14 MP, same timing, same HUD/zoom/buttons).
+> This proves the container format and checksum recomputation are right and that there is no signature check.
+
+
 > **Owner's go-ahead required.** Nothing here has been done yet. Only the camera's owner should flash
 > firmware, and only after reading [ANALYSIS.md](ANALYSIS.md) §8 (brick risk). No agent or script flashes
 > the camera. Every step below is done by hand, using the camera's own Setup menu.

@@ -320,6 +320,22 @@ class L120:
     def delete(self, handle: int):
         self._ok(0x100B, (handle, 0), what="Delete")
 
+    def upload(self, name: str, data: bytes = b"", parent: int = 0xFFFFFFFF, folder: bool = False) -> int:
+        """Create a file (or folder) on the card via PTP SendObjectInfo/SendObject.
+        parent=0xFFFFFFFF means the card root. Returns the new object handle.
+        Note: the L120 answers AccessDenied (0x200F) / GeneralError (0x2002) to creating
+        folders at the card root, so firmware files must be copied with a card reader."""
+        storage = _Reader(self._ok(0x1004)[0]).arr("I")[0]
+        fmt = 0x3001 if folder else 0x3000
+        info = struct.pack("<IHHIHIIIIIIIHII", storage, fmt, 0, 0 if folder else len(data), 0, 0, 0, 0,
+                           0, 0, 0, parent if parent != 0xFFFFFFFF else 0, 1 if folder else 0, 0, 0)
+        info += _ptp_str(name) + b"\x00" * 3  # filename, empty capture/modification dates and keywords
+        _, rp = self._ok(0x100C, (storage, parent), info, "SendObjectInfo")
+        handle = rp[2] if len(rp) > 2 else None
+        if not folder:
+            self._ok(0x100D, (), data, "SendObject")
+        return handle
+
     # ---------- shooting ----------
     def capture(self, keep_on_card: bool = True, timeout_s: float = 40) -> tuple[bytes, ObjectInfo]:
         """Fire the shutter (camera does its own AF + metering), return the JPEG.

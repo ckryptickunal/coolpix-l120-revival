@@ -1,5 +1,11 @@
 # COOLPIX L120 firmware v1.1: reverse-engineering findings
 
+> **✅ Confirmed on real hardware (2026-10-20):** the step-1 EXIF patch was flashed to a COOLPIX L120 through the
+> normal Setup → Firmware version menu. The camera accepted the rebuilt image, now reports `L120 REVIVAL 0.1` as its
+> PTP DeviceVersion and in EXIF Software, and shoots normally (14 MP, same timing, same HUD/zoom/buttons).
+> This proves the container format and checksum recomputation are right and that there is no signature check.
+
+
 Analysis of Nikon's official COOLPIX L120 firmware update 1.1 (the only update Nikon released), done to
 find out whether new features can be patched in. **Nothing was ever written to the camera.** All work was
 static: reading the update file on a Mac.

@@ -93,7 +93,11 @@ Full analysis: [docs/firmware/ANALYSIS.md](docs/firmware/ANALYSIS.md) (independe
 | HDMI live view | Unknown, test stock first |
 | USB remote exposure/zoom | Not in stock; a later code patch could add it |
 
-**Next step (needs the owner):** flash the harmless step-1 test patch, which changes only the EXIF "Software"
+**Milestone, 2026-10-20: the first modified firmware runs on a real L120.** The step-1 patch (EXIF/PTP version
+text → `L120 REVIVAL 0.1`) was flashed through the camera's own update menu and works, which proves the rebuilt
+image and checksums are accepted. Next: the long-exposure patch (Fireworks 4 s → 8/15/30 s).
+
+**How it was done (for other owners):** flash the harmless step-1 test patch, which changes only the EXIF "Software"
 text, to prove the camera accepts a rebuilt image. Then the long-exposure patch. Exact steps and the rollback
 are in [docs/firmware/FLASHING.md](docs/firmware/FLASHING.md). Nikon's firmware is never included in this repo:
 download it from Nikon.
