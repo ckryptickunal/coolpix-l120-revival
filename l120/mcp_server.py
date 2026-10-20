@@ -144,6 +144,131 @@ def delete_from_card(path: str, confirm: bool = False) -> str:
     return _run(f)
 
 
+# ---------------------------------------------------------------------------
+# Lab: computational photography + creative tools (work on files on the Mac)
+# ---------------------------------------------------------------------------
+from pathlib import Path as _P
+
+_LAB_OUT = features.OUT_ROOT / "lab"
+
+
+def _paths(paths: list[str] | str) -> list[str]:
+    """Accept a list of files, a folder, or a glob."""
+    if isinstance(paths, str):
+        p = _P(paths).expanduser()
+        if p.is_dir():
+            return sorted(str(x) for x in p.iterdir() if x.suffix.lower() in (".jpg", ".jpeg"))
+        return sorted(str(x) for x in _P("/").glob(str(p).lstrip("/"))) or [str(p)]
+    return [str(_P(x).expanduser()) for x in paths]
+
+
+def _out(name: str) -> str:
+    _LAB_OUT.mkdir(parents=True, exist_ok=True)
+    import datetime as _dt
+    return str(_LAB_OUT / f"{_dt.datetime.now():%Y%m%d-%H%M%S}-{name}")
+
+
+@mcp.tool()
+def night_mode(frames: int = 8) -> list:
+    """Handheld night mode: shoot `frames` photos, align them and merge to cut noise (like a phone's night mode)."""
+    from .lab import merge
+    def f(cam):
+        d = features._session_dir("night")
+        paths = []
+        for i in range(frames):
+            data, _ = cam.capture(keep_on_card=False)
+            p = d / f"frame_{i + 1:03d}.jpg"
+            p.write_bytes(data)
+            paths.append(str(p))
+        out = str(d / "night_mode.jpg")
+        r = merge.night_mode(paths, out)
+        return [str(r), _preview(open(out, "rb").read())]
+    return _run(f)
+
+
+@mcp.tool()
+def merge_photos(paths: list[str] | str, kind: str = "night") -> list:
+    """Merge existing photos (list, folder or glob). kind: night (align+denoise), lighten/mean/median/darken
+    (aligned stack), hdr (exposure fusion of shots at different EV), panorama, superres (2x multi-frame)."""
+    from .lab import merge
+    ps = _paths(paths)
+    out = _out(f"{kind}.jpg")
+    if kind == "night":
+        r = merge.night_mode(ps, out)
+    elif kind in ("lighten", "mean", "median", "darken"):
+        r = merge.aligned_stack(ps, out, mode=kind)
+    elif kind == "hdr":
+        r = merge.exposure_fusion(ps, out)
+    elif kind == "panorama":
+        r = merge.panorama(ps, out)
+    elif kind == "superres":
+        r = merge.super_resolution(ps, out)
+    else:
+        raise ValueError("kind must be night, lighten, mean, median, darken, hdr, panorama or superres")
+    return [str(r), _preview(open(out, "rb").read())]
+
+
+@mcp.tool()
+def analyze_photo(path: str) -> list:
+    """CHDK-style shot report: histogram, clipped highlights/shadows (zebra), sharpness, noise, EXIF."""
+    from .lab import analyze
+    r = analyze.shot_report(path, _out("report"))
+    imgs = [_preview(open(v, "rb").read(), 800) for k, v in r.items()
+            if isinstance(v, str) and v.lower().endswith((".png", ".jpg")) and _P(v).exists()][:2]
+    return [str({k: v for k, v in r.items()})] + imgs
+
+
+@mcp.tool()
+def cull_photos(folder: str) -> dict:
+    """Rank a folder of photos: flag blurry/badly exposed/near-duplicates, pick the best of each burst; writes an HTML contact sheet."""
+    from .lab import analyze
+    return analyze.cull(folder, _out("cull"))
+
+
+@mcp.tool()
+def apply_film_look(path: str, look: str = "", date_stamp: bool = False) -> list:
+    """Apply a film simulation to a photo. Empty look = list available looks and render a comparison grid."""
+    from .lab import looks
+    if not look:
+        out = _out("looks-grid.jpg")
+        looks.preview_grid(path, out)
+        return [f"Looks: {', '.join(looks.LOOKS)}", _preview(open(out, 'rb').read())]
+    out = _out(f"{look}.jpg")
+    looks.apply_look(path, look, out, datestamp=date_stamp)
+    return [f"Saved {out}", _preview(open(out, "rb").read())]
+
+
+@mcp.tool()
+def video_tool(path: str, action: str = "convert", factor: float = 0.5, start: float = 0.0, seconds: float = 3.0) -> str:
+    """Work on a camera MOV: convert (web MP4), stabilize, speed (factor<1 = smooth slow-mo), gif, best_frame."""
+    from .lab import video
+    if action == "convert":
+        return str(video.convert(path, _out("video.mp4")))
+    if action == "stabilize":
+        return str(video.stabilize(path, _out("stabilized.mp4")))
+    if action == "speed":
+        return str(video.speed(path, _out(f"speed{factor}.mp4"), factor))
+    if action == "gif":
+        return str(video.to_gif(path, _out("clip.gif"), start, seconds))
+    if action == "best_frame":
+        return str(video.extract_best_frame(path, _out("best.jpg")))
+    raise ValueError("action must be convert, stabilize, speed, gif or best_frame")
+
+
+@mcp.tool()
+def memories(folder: str, action: str = "album", date: str = "") -> str:
+    """From a folder of camera photos/videos: album (self-contained HTML album by year), slideshow (Ken Burns MP4),
+    on_this_day (photos from this day in past years; date YYYY-MM-DD optional)."""
+    from .lab import memories as m
+    if action == "album":
+        return str(m.album(folder, _out("album")))
+    if action == "slideshow":
+        return str(m.slideshow(_paths(folder), _out("slideshow.mp4")))
+    if action == "on_this_day":
+        return str(m.on_this_day(folder, date or None))
+    raise ValueError("action must be album, slideshow or on_this_day")
+
+
 def main():
     mcp.run()
 
