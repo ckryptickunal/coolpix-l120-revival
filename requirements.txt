@@ -4,3 +4,4 @@ pillow
 mcp>=2
 piexif>=1.1
 opencv-python-headless
+segno>=1.5
