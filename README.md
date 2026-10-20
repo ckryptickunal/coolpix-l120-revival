@@ -22,16 +22,40 @@ Source: [Nikon press release](https://www.nikon.com/company/news/2011/0209_l120l
 
 Full researched feature roadmap (what other camera hacks such as CHDK and Magic Lantern do, sorted into "doable now", "needs firmware" and "impossible"): [docs/FEATURE_CATALOG.md](docs/FEATURE_CATALOG.md).
 
-## What works today (tested on the real camera, firmware V1.1)
+## What it can do now
 
-| Feature | How | Status |
-|---|---|---|
-| Remote shutter from the Mac | USB PTP `InitiateCapture` | ✅ ~4 s per shot, full 14 MP JPEG |
-| Simulated long exposure | Shoot N frames, merge (lighten / mean / darken / median) | ✅ |
-| Timelapse + MP4 | Intervalometer + ffmpeg | ✅ min interval ≈ 5 s |
-| Card browser / import / thumbnails | PTP object ops | ✅ |
-| Fix camera clock (stuck at 2011-01-01) | PTP property 0x5011 | built, not yet run |
-| MCP server (`nikon-l120`) | registered in Claude Code, user scope | ✅ connected |
+**Camera control over USB** (tested on the real camera, firmware V1.1)
+
+| Feature | Status |
+|---|---|
+| Remote shutter from the Mac, full 14 MP JPEG | ✅ ~4–5 s per shot |
+| Simulated long exposure (light trails, silky water, remove passers-by) | ✅ |
+| Timelapse → MP4 | ✅ min interval ≈ 5 s |
+| Card browser, thumbnails, import (per folder, never deletes) | ✅ |
+| Camera clock fix (it resets to 2011-01-01 on battery swaps) | built, not yet run on the camera |
+| Plug-and-go auto-import (+ optional Apple Photos → iPhone) | built, not yet run on the camera |
+
+**Lab: new photo powers on the Mac** (tested on real L120 frames; see `docs/lab/`)
+
+| Feature | What it gives the old camera |
+|---|---|
+| Night mode | Handheld multi-frame align + merge, like a phone's night mode (−31 % noise on 3 real frames, −57 % on 6) |
+| Aligned stacks | Light/star trails and smooth water without a tripod |
+| HDR fusion | Merge shots taken at different exposure compensation (set EV on the multi-selector) |
+| Panorama | Stitch a sweep of shots |
+| Super-resolution | 2× multi-frame upscale (modest gain, mostly cleaner) |
+| Deflickered timelapse | Removes auto-exposure flicker |
+| Shot report | CHDK-style histogram, blown-highlight zebra, sharpness and noise after each shot |
+| Smart cull | Flags blurry, badly exposed and duplicate shots; picks the best of each burst |
+| Date repair | Fixes the 2011 clock dates on *copies* of your photos (never the originals) |
+| Film looks | 8 presets (Kodachrome, Portra, Velvia, classic chrome, B&W red filter, teal-orange, CCD glow, faded) + the classic orange date stamp |
+| Video tools | Web-ready MP4, stabilisation, smooth slow-mo, GIFs, best-frame grab |
+| Memories | Self-contained HTML album, Ken Burns slideshow with music, "On this day" |
+
+**MCP server `nikon-l120`** (registered in Claude Code): 17 tools, from `take_photo`, `night_mode`, `long_exposure` and
+`timelapse` to `list_card`, `import_card`, `merge_photos`, `analyze_photo`, `cull_photos`, `apply_film_look`, `video_tool`
+and `memories`. Ask Claude things like "take a night-mode shot with the L120", "turn my card photos into an album",
+"make a 30-frame light-trail long exposure".
 
 ## Hard limits of the stock firmware over USB
 
@@ -98,12 +122,15 @@ Or just ask Claude: "take a photo with the L120", "do a 20-frame light-trail lon
 
 Output lands in `captures/`. Notes:
 - macOS's Image Capture daemon grabs the camera; the driver kills it on connect (it respawns, harmless).
-- Listing the card is slow (~60 s) the first time per connection while the camera indexes ~300 files.
+- A whole-card listing takes ~60 s on this camera; the driver lists folder by folder instead (instant).
+- Plug-and-go: `python -m l120.autoimport --watch` (or `--install-agent` to run at login; add `--photos` for Apple Photos).
 - Set the camera to shooting mode (not playback) and disable Auto off in the Setup menu for long sessions.
 
 ## Layout
 - `l120/camera.py` – USB PTP driver
 - `l120/features.py` – stacking, timelapse, import
 - `l120/mcp_server.py` – MCP server
+- `l120/autoimport.py` – plug-and-go import
+- `l120/lab/` – night mode, HDR, panorama, analysis, film looks, video, memories
 - `studio/` – L120 Studio web app (`server.py` backend, `static/` page, `fake.py` simulated camera)
 - `tools/` – probe scripts; `probe/` – probe results
