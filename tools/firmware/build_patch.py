@@ -59,6 +59,8 @@ def main():
         patch(data, 0x56EA60, b'COOLPIX L120V1.1', new, 'exif-software')
 
     if a.fireworks_seconds is not None:
+        raise SystemExit('--fireworks-seconds is disabled: on real hardware it causes "System error" on shutter half-press '
+                         '(see docs/firmware/ANALYSIS.md). Do not flash it.')
         s = a.fireworks_seconds
         if not 1 <= s <= 60:
             raise SystemExit('--fireworks-seconds must be 1..60')

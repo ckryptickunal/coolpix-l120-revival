@@ -1,5 +1,13 @@
 # Flashing the step-1 test patch (and rolling back)
 
+> **⚠️ DO NOT FLASH THE FIREWORKS-SECONDS PATCH (step 2).** Tested on real hardware on 2026-10-20: the 8 s build
+> (`--fireworks-seconds 8`) flashed fine and boots, but the camera shows **"System error" and powers off on the first
+> shutter half-press, even in Auto**. The inference below that `cam->scene == 1` means Fireworks was wrong: mode 1
+> comes from scene-menu position 12, not Fireworks, and the literal at 0x163A08 is evidently reached on the half-press
+> AE path in normal use. Recovery: reflash stock v1.1 or the step-1 image (menus still work; just don't half-press).
+> `build_patch.py` now refuses `--fireworks-seconds` until this path is understood.
+
+
 > **✅ Confirmed on real hardware (2026-10-20):** the step-1 EXIF patch was flashed to a COOLPIX L120 through the
 > normal Setup → Firmware version menu. The camera accepted the rebuilt image, now reports `L120 REVIVAL 0.1` as its
 > PTP DeviceVersion and in EXIF Software, and shoots normally (14 MP, same timing, same HUD/zoom/buttons).

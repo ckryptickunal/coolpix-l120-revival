@@ -86,7 +86,7 @@ Full analysis: [docs/firmware/ANALYSIS.md](docs/firmware/ANALYSIS.md) (independe
 
 | Feature | Verdict |
 |---|---|
-| Longer Fireworks exposure (8–30 s) | Likely works: tiny data patch |
+| Longer Fireworks exposure (8–30 s) | ❌ First attempt (8 s) caused "System error" on half-press on real hardware; recovered. The value is used on the normal metering path too. Redesign needed |
 | Manual shutter/ISO | Feasible: engine exists, needs a UI hook |
 | Bulb / 60 s | Feasible later |
 | RAW | Promising |
@@ -95,7 +95,7 @@ Full analysis: [docs/firmware/ANALYSIS.md](docs/firmware/ANALYSIS.md) (independe
 
 **Milestone, 2026-10-20: the first modified firmware runs on a real L120.** The step-1 patch (EXIF/PTP version
 text → `L120 REVIVAL 0.1`) was flashed through the camera's own update menu and works, which proves the rebuilt
-image and checksums are accepted. Next: the long-exposure patch (Fireworks 4 s → 8/15/30 s).
+image and checksums are accepted. The fixed 8 s long-exposure patch was tried next and failed safely ("System error" on half-press, recovered by reflashing). Long exposure is being redesigned to change exposure only at capture time.
 
 **How it was done (for other owners):** flash the harmless step-1 test patch, which changes only the EXIF "Software"
 text, to prove the camera accepts a rebuilt image. Then the long-exposure patch. Exact steps and the rollback
