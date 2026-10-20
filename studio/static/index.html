@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>L120 Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='8' width='28' height='18' rx='4' fill='%23111'/%3E%3Ccircle cx='16' cy='17' r='6' fill='none' stroke='%23ffcc00' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-shoot" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-stack" viewBox="0 0 24 24"><path d="M3 18c4-1 7-6 18-12M3 14c4-1 7-5 14-9M5 20c4-.5 9-4 16-9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="18" cy="17" r="1.2" fill="currentColor"/><circle cx="8" cy="6" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-timelapse" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 9v4l3 2M9 2h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><path d="M7 3h8l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 3v4M12 3v4M15 3v4" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-live" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 10h3v4H7zM13 10h4M13 14h4" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.5M4 13a8 8 0 0 0 14.6 4.5M5 3v4h4M19 21v-4h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+</svg>
+
+<header class="hud">
+  <div class="brand"><span class="brand-mark"></span><span>COOLPIX L120</span><em>Studio</em></div>
+  <div class="hud-items">
+    <div class="hud-item" id="hud-link" title="USB link"><span class="dot"></span><span class="label">—</span></div>
+    <div class="hud-item" id="hud-battery" title="Battery">
+      <span class="batt"><span class="batt-fill"></span></span><span class="num">--</span>
+    </div>
+    <div class="hud-item" id="hud-card" title="Card">
+      <svg class="ic"><use href="#i-card"/></svg><span class="num shots">[ ---- ]</span><span class="sub free"></span>
+    </div>
+    <div class="hud-item" id="hud-clock" title="Camera clock">
+      <span class="num clock">----.--.-- --:--</span>
+      <button class="chip" id="btn-sync" title="Set the camera clock to this Mac's time"><svg class="ic"><use href="#i-sync"/></svg>Sync to Mac</button>
+    </div>
+    <div class="hud-item dim" id="hud-fw" title="Firmware">FW --</div>
+    <button class="chip ghost" id="btn-refresh" title="Read status from the camera (R)"><svg class="ic"><use href="#i-sync"/></svg></button>
+  </div>
+</header>
+
+<div class="app">
+  <nav class="dial" aria-label="Modes">
+    <button data-mode="shoot" class="active"><svg><use href="#i-shoot"/></svg><span>Shoot</span><kbd>1</kbd></button>
+    <button data-mode="stack"><svg><use href="#i-stack"/></svg><span>Long exp.</span><kbd>2</kbd></button>
+    <button data-mode="timelapse"><svg><use href="#i-timelapse"/></svg><span>Timelapse</span><kbd>3</kbd></button>
+    <button data-mode="card"><svg><use href="#i-card"/></svg><span>Card</span><kbd>4</kbd></button>
+    <button data-mode="live"><svg><use href="#i-live"/></svg><span>Live view</span><kbd>5</kbd></button>
+  </nav>
+
+  <main class="stage">
+    <!-- viewer (shoot / stack / timelapse) -->
+    <section class="viewer" id="viewer">
+      <div class="frame">
+        <img id="view-img" alt="" hidden>
+        <video id="view-video" controls loop playsinline hidden></video>
+        <div class="empty" id="view-empty">
+          <div class="af"></div>
+          <p id="view-empty-text">Press <kbd>Space</kbd> to shoot</p>
+          <small>Zoom, scene mode and flash are set on the camera body.</small>
+        </div>
+        <div class="corners"><i></i><i></i><i></i><i></i></div>
+        <div class="osd tl" id="osd-tl"></div>
+        <div class="osd tr" id="osd-tr"></div>
+        <div class="osd bl" id="osd-bl"></div>
+        <a class="osd br link" id="osd-open" target="_blank" hidden>Open full size ↗</a>
+      </div>
+      <div class="filmstrip" id="filmstrip"></div>
+    </section>
+
+    <!-- card gallery -->
+    <section class="gallery" id="gallery" hidden>
+      <div class="gallery-bar">
+        <div class="seg" id="folder-filter"></div>
+        <div class="spacer"></div>
+        <span class="dim" id="gallery-count"></span>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="empty big" id="gallery-empty">
+        <svg><use href="#i-card"/></svg>
+        <p>The card hasn't been read yet.</p>
+        <button class="btn primary" id="btn-list-empty">Read card</button>
+      </div>
+    </section>
+
+    <!-- live view -->
+    <section class="live" id="live" hidden>
+      <div class="frame">
+        <video id="live-video" autoplay muted playsinline></video>
+        <div class="empty" id="live-empty">
+          <svg><use href="#i-live"/></svg>
+          <p>No video source selected</p>
+          <small>Live view comes from the camera's HDMI or AV output through a USB capture dongle.</small>
+        </div>
+        <div class="corners"><i></i><i></i><i></i><i></i></div>
+        <div class="osd tl rec" id="live-osd" hidden><span class="dot"></span>LIVE</div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="panel" id="panel">
+    <!-- SHOOT -->
+    <div class="pane" data-pane="shoot">
+      <h2>Shoot</h2>
+      <p class="hint">The camera focuses and meters by itself. Each shot takes about 4–5 s.</p>
+      <button class="shutter" id="btn-shoot" title="Shoot (Space)"><span></span></button>
+      <label class="toggle"><input type="checkbox" id="keep-on-card" checked><span class="sw"></span>
+        <span>Keep on card<small>Off = only a copy on the Mac; the fresh shot is removed from the card</small></span></label>
+    </div>
+
+    <!-- STACK -->
+    <div class="pane" data-pane="stack" hidden>
+      <h2>Long exposure</h2>
+      <p class="hint">Shoots a burst and merges it on the Mac. Put the camera on something steady.</p>
+      <div class="modes" id="stack-modes">
+        <button data-v="lighten" class="active"><b>Lighten</b><small>Light trails, star trails</small></button>
+        <button data-v="mean"><b>Mean</b><small>Silky water, less noise</small></button>
+        <button data-v="darken"><b>Darken</b><small>Remove bright moving things</small></button>
+        <button data-v="median"><b>Median</b><small>Remove passers-by</small></button>
+      </div>
+      <label class="field"><span>Frames</span>
+        <input type="range" id="stack-frames" min="2" max="60" value="10"><output id="stack-frames-out">10</output></label>
+      <p class="est" id="stack-est"></p>
+      <button class="btn primary wide" id="btn-stack">Start long exposure</button>
+      <div class="pips" id="stack-pips"></div>
+    </div>
+
+    <!-- TIMELAPSE -->
+    <div class="pane" data-pane="timelapse" hidden>
+      <h2>Timelapse</h2>
+      <p class="hint">An intervalometer on the Mac, rendered to MP4. Shortest real interval is about 5 s.</p>
+      <div class="row3">
+        <label class="field col"><span>Shots</span><input type="number" id="tl-count" min="2" max="5000" value="60"></label>
+        <label class="field col"><span>Every (s)</span><input type="number" id="tl-interval" min="5" step="1" value="10"></label>
+        <label class="field col"><span>FPS</span><input type="number" id="tl-fps" min="1" max="60" value="24"></label>
+      </div>
+      <p class="est" id="tl-est"></p>
+      <button class="btn primary wide" id="btn-tl">Start timelapse</button>
+    </div>
+
+    <!-- CARD -->
+    <div class="pane" data-pane="card" hidden>
+      <h2>Card</h2>
+      <p class="hint">Click a photo to open it. Select several to copy them to the Mac (<code>captures/card-import/&lt;folder&gt;/</code>). Nothing is ever deleted from the card.</p>
+      <button class="btn wide" id="btn-list"><svg class="ic"><use href="#i-sync"/></svg>Refresh card list</button>
+      <div class="selbox">
+        <div class="selcount"><b id="sel-count">0</b> selected</div>
+        <div class="row2">
+          <button class="btn small" id="btn-sel-all">Select all (A)</button>
+          <button class="btn small" id="btn-sel-new">Not on Mac</button>
+          <button class="btn small" id="btn-sel-none">Clear</button>
+        </div>
+        <button class="btn primary wide" id="btn-import" disabled><svg class="ic"><use href="#i-down"/></svg>Import to Mac</button>
+      </div>
+    </div>
+
+    <!-- LIVE -->
+    <div class="pane" data-pane="live" hidden>
+      <h2>Live view</h2>
+      <label class="field"><span>Video source</span><select id="live-device"><option value="">—</option></select></label>
+      <div class="row2">
+        <button class="btn small" id="btn-live-start">Show</button>
+        <button class="btn small" id="btn-live-stop">Stop</button>
+        <button class="btn small" id="btn-live-scan">Rescan</button>
+      </div>
+      <p class="hint" id="live-detected"></p>
+      <div class="help">
+        <h3>How to connect</h3>
+        <ol>
+          <li><b>HDMI (best):</b> camera's mini-HDMI port (Type C) → HDMI cable → a USB HDMI capture dongle (any "UVC" one, ~$15) → Mac.</li>
+          <li><b>AV (fallback):</b> the yellow plug of the camera's AV cable → a composite/RCA-to-USB dongle → Mac. Standard-definition only.</li>
+          <li>On the camera: <b>Setup menu → HDMI</b> → 720p or 1080i, and <b>Auto off → Off</b> (30 min max otherwise).</li>
+          <li>Pick the dongle above. The browser will ask for camera permission the first time.</li>
+        </ol>
+        <p class="dim">Over USB the stock firmware has no live view; video output is the only way. While HDMI is plugged in, the camera's own screen turns off.</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<footer class="jobbar" id="jobbar" hidden>
+  <div class="job-kind" id="job-kind"></div>
+  <div class="job-msg" id="job-msg"></div>
+  <div class="job-progress"><div class="bar" id="job-bar"></div></div>
+  <div class="job-count num" id="job-count"></div>
+  <button class="btn small" id="btn-cancel">Stop (Esc)</button>
+</footer>
+
+<div class="toasts" id="toasts"></div>
+
+<div class="lightbox" id="lightbox" hidden>
+  <div class="lb-top">
+    <div><b id="lb-name"></b> <span class="dim" id="lb-meta"></span></div>
+    <div class="row2">
+      <a class="btn small" id="lb-download"><svg class="ic"><use href="#i-down"/></svg>Download</a>
+      <button class="btn small icon" id="lb-close" title="Close (Esc)"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+  <div class="lb-body"><div class="spinner" id="lb-spin"></div><img id="lb-img" alt=""><video id="lb-video" controls hidden></video></div>
+  <div class="lb-hint dim">← → to browse · Space to select · Esc to close</div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

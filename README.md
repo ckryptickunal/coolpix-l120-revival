@@ -65,6 +65,29 @@ Settable from the Mac: shutter, clock. Everything else lives on the camera body.
    **This step can brick the camera.** It needs your explicit go-ahead.
 4. Then real features: longer shutter limits, manual exposure, RAW dump, intervalometer on-camera.
 
+## L120 Studio (web app)
+
+A local web app that makes the camera pleasant to use from the laptop.
+
+```bash
+cd ~/Desktop/l120 && .venv/bin/python -m studio      # then open http://localhost:8120
+```
+
+| Panel | What it does |
+|---|---|
+| Status bar | Battery, free shots / space on the card, firmware, camera clock (orange when wrong) with **Sync to Mac** |
+| Shoot (`1`, `Space`) | Big shutter button; the last shot shows full size; filmstrip of this session. *Keep on card* is on by default |
+| Long exposure (`2`) | N frames merged as lighten / mean / darken / median, with a per-frame progress strip and a live merged preview. Stop early keeps what was shot |
+| Timelapse (`3`) | Count, interval (≥ 5 s), fps → MP4, showing each new frame as it lands |
+| Card (`4`) | Thumbnail grid of the card (folder shown on every tile: 100NIKON and 101NIKON reuse filenames). Click to open full size, ⌘/Shift-click or `A` to select, **Import to Mac** copies to `captures/card-import/<folder>/`. Nothing is ever deleted from the card |
+| Live view (`5`) | Shows the camera's HDMI/AV output through a USB capture dongle (lists AVFoundation devices via ffmpeg), with a how-to-connect card |
+
+How it behaves:
+- One camera operation at a time. Long jobs run in the background and stream progress to the page (Server-Sent Events); `Esc` stops a stack, timelapse or import after the current frame/file.
+- It opens the USB connection per operation and lets go ~3 s after (`L120_STUDIO_IDLE_S`), so the MCP server and scripts can use the camera in between. If another program has the camera, the page says so instead of hanging.
+- `L120_STUDIO_FAKE=1 .venv/bin/python -m studio --port 8121` runs it against a simulated camera (output goes to `captures/fake/`), for UI work without the L120.
+- No new dependencies: Python's standard-library HTTP server plus the existing `l120` package.
+
 ## Usage
 
 ```bash
@@ -82,4 +105,5 @@ Output lands in `captures/`. Notes:
 - `l120/camera.py` – USB PTP driver
 - `l120/features.py` – stacking, timelapse, import
 - `l120/mcp_server.py` – MCP server
+- `studio/` – L120 Studio web app (`server.py` backend, `static/` page, `fake.py` simulated camera)
 - `tools/` – probe scripts; `probe/` – probe results

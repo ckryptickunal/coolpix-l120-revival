@@ -28,19 +28,34 @@ def take_photo(cam: L120, keep_on_card=True) -> Path:
     return out
 
 
-def stack(cam: L120, frames: int, mode: str = "lighten", keep_frames=True) -> dict:
+def _merge(mode, acc, kept, n):
+    if mode == "median":
+        return np.median(np.stack(kept), axis=0).astype(np.uint8)
+    if mode == "mean":
+        return np.clip(acc / n, 0, 255).astype(np.uint8)
+    return acc
+
+
+def stack(cam: L120, frames: int, mode: str = "lighten", keep_frames=True,
+          progress=None, should_stop=None) -> dict:
     """Simulated long exposure: shoot N frames and merge them.
 
     mode: lighten = light trails / star trails (brightest pixel wins)
           mean    = smooth water / crowds vanish / less noise
           darken  = remove bright moving things
           median  = remove people/objects that move through the scene
+
+    progress(done, total, merged) is called after each frame; merged() returns
+    the current merged image (uint8 RGB array). should_stop() ends the run
+    early; the frames shot so far are still merged and saved.
     """
     if mode not in ("lighten", "mean", "darken", "median"):
         raise ValueError("mode must be lighten, mean, darken or median")
     d = _session_dir(f"stack-{mode}")
-    acc, kept, t0, exif = None, [], time.time(), None
+    acc, kept, t0, exif, done = None, [], time.time(), None, 0
     for i in range(frames):
+        if should_stop and should_stop():
+            break
         data, _ = cam.capture(keep_on_card=False)
         if keep_frames:
             (d / f"frame_{i + 1:03d}.jpg").write_bytes(data)
@@ -57,30 +72,43 @@ def stack(cam: L120, frames: int, mode: str = "lighten", keep_frames=True) -> di
             np.maximum(acc, a, out=acc)
         else:
             np.minimum(acc, a, out=acc)
-    if mode == "median":
-        result = np.median(np.stack(kept), axis=0).astype(np.uint8)
-    elif mode == "mean":
-        result = np.clip(acc / frames, 0, 255).astype(np.uint8)
-    else:
-        result = acc
-    out = d / f"stacked_{mode}_{frames}f.jpg"
+        done = i + 1
+        if progress:
+            progress(done, frames, lambda: _merge(mode, acc, kept, done))
+    if not done:
+        return {"result": None, "frames": 0, "seconds": round(time.time() - t0, 1), "folder": str(d)}
+    result = _merge(mode, acc, kept, done)
+    out = d / f"stacked_{mode}_{done}f.jpg"
     Image.fromarray(result).save(out, quality=95, **({"exif": exif} if exif else {}))
-    return {"result": str(out), "frames": frames, "seconds": round(time.time() - t0, 1), "folder": str(d)}
+    return {"result": str(out), "frames": done, "seconds": round(time.time() - t0, 1), "folder": str(d)}
 
 
-def timelapse(cam: L120, count: int, interval_s: float, fps: int = 24, make_video=True) -> dict:
-    """Intervalometer. Minimum real interval is ~5 s (camera's own shot-to-shot time)."""
+def timelapse(cam: L120, count: int, interval_s: float, fps: int = 24, make_video=True,
+              progress=None, should_stop=None) -> dict:
+    """Intervalometer. Minimum real interval is ~5 s (camera's own shot-to-shot time).
+
+    progress(done, total, frame_path) is called after each frame. should_stop()
+    ends the run early; the video is still made from the frames shot so far.
+    """
     d = _session_dir("timelapse")
     t0 = time.time()
+    done = 0
     for i in range(count):
+        if should_stop and should_stop():
+            break
         start = time.time()
         data, _ = cam.capture(keep_on_card=False)
-        (d / f"tl_{i + 1:05d}.jpg").write_bytes(data)
+        frame = d / f"tl_{i + 1:05d}.jpg"
+        frame.write_bytes(data)
+        done = i + 1
+        if progress:
+            progress(done, count, frame)
         wait = interval_s - (time.time() - start)
-        if wait > 0 and i < count - 1:
-            time.sleep(wait)
-    result = {"frames": count, "folder": str(d), "seconds": round(time.time() - t0, 1)}
-    if make_video and count > 1:
+        while wait > 0 and i < count - 1 and not (should_stop and should_stop()):
+            time.sleep(min(wait, 0.5))
+            wait = interval_s - (time.time() - start)
+    result = {"frames": done, "folder": str(d), "seconds": round(time.time() - t0, 1)}
+    if make_video and done > 1:
         video = d / "timelapse.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i", str(d / "tl_%05d.jpg"),
                         "-vf", "scale=1920:-2", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(video)], check=True)

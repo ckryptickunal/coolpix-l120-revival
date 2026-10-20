@@ -9,3 +9,5 @@ probe/*.jpg
 probe/*.log
 .DS_Store
 docs/body-photos/
+.venv
+.claude/launch.json
